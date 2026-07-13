@@ -293,11 +293,14 @@ function renderSettings() {
       <label>文件路径</label>
       <input id="cfg-path" value="${cfg.path || 'data.json'}">
       <label>Personal Access Token</label>
-      <input id="cfg-token" type="password" value="${cfg.token || ''}" placeholder="github_pat_...">
+      <div class="token-row">
+        <input id="cfg-token" type="password" value="${cfg.token || ''}" placeholder="github_pat_...">
+        <button type="button" id="btn-toggle-token" class="act">显示</button>
+      </div>
       <div class="btn-row">
         <button type="button" id="btn-save-cfg" class="act on">保存并同步</button>
       </div>
-      <p class="muted">${statusText()}</p>
+      <p class="muted">${cfg.token ? '已保存 token(可随时改后重新保存)' : '尚未保存 token'} · ${statusText()}</p>
     </section>
     <section class="card">
       <h3>备份</h3>
@@ -309,6 +312,12 @@ function renderSettings() {
     </section>
   `;
 
+  document.getElementById('btn-toggle-token').onclick = (e) => {
+    const input = document.getElementById('cfg-token');
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    e.target.textContent = showing ? '显示' : '隐藏';
+  };
   document.getElementById('btn-save-cfg').onclick = async () => {
     GH.saveConfig({
       owner: document.getElementById('cfg-owner').value.trim(),

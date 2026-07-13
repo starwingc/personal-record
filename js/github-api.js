@@ -106,10 +106,16 @@ export async function loadData() {
   return { data, mode: 'remote' };
 }
 
+function wait(ms) {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
 // Applies `mutationFn` to the freshest copy of the data and persists the
 // result. Remote writes are re-applied against the latest sha on 409
 // (concurrent edit from the other device) rather than merging documents.
-export async function mutate(mutationFn, { maxRetries = 2 } = {}) {
+// A short randomized backoff before each retry keeps two devices writing
+// around the same moment from repeatedly colliding on the same sha.
+export async function mutate(mutationFn, { maxRetries = 4 } = {}) {
   const cfg = getConfig();
   if (!isConfigured()) {
     const data = readLocal();
@@ -129,6 +135,7 @@ export async function mutate(mutationFn, { maxRetries = 2 } = {}) {
     } catch (e) {
       if (e.conflict && attempt < maxRetries) {
         attempt += 1;
+        await wait(150 * attempt + Math.random() * 200);
         continue;
       }
       throw e;

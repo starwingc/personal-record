@@ -118,6 +118,10 @@ label {
 
 textarea { min-height: 60px; resize: vertical; }
 
+.token-row { display: flex; gap: 8px; align-items: flex-start; }
+.token-row input { flex: 1; }
+.token-row button { flex-shrink: 0; padding: 8px 12px; }
+
 .link-btn {
   border: none;
   background: none;

@@ -2,13 +2,14 @@ import * as GH from './github-api.js';
 import * as Schedule from './schedule.js';
 import * as Period from './period.js';
 import * as Mood from './mood.js';
-import { todayStr, formatDate } from './date-utils.js';
+import { todayStr, formatDate, parseDate } from './date-utils.js';
 
-const MOOD_EMOJI = ['😞', '😕', '😐', '🙂', '😄'];
 const VIEWS = ['today', 'calendar', 'period', 'guide', 'settings'];
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
 const state = { data: null, mode: 'local', error: null };
 let calendarMonth = new Date();
+const expandedDates = new Set([todayStr()]);
 
 function statusText() {
   if (state.error) return `同步失败: ${state.error}`;
@@ -66,125 +67,180 @@ function route() {
   else if (view === 'settings') renderSettings();
 }
 
+// ---------- shared day-card component ----------
+
+function dayCardHtml(dateStr, { expanded }) {
+  const date = parseDate(dateStr);
+  const entry = Schedule.getEntry(state.data.schedule, dateStr);
+  const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
+  const isPeriod = state.data.periodLogs.includes(dateStr);
+  const isToday = dateStr === todayStr();
+
+  const badge = !entry
+    ? '<span class="badge r">顺延</span>'
+    : `<span class="badge ${entry.type === 'cardio' ? 'c' : 's'}">${entry.type === 'cardio' ? '有氧' : '力量'}</span>`;
+
+  const title = !entry ? '休息日 · 计划已顺延' : (entry.type === 'cardio' ? '有氧日' : '力量日');
+
+  const items = entry ? Schedule.getItemsForType(entry.type) : [];
+  const checked = entry?.checkedItems || [];
+  const summary = entry ? `${checked.length}/${items.length}` : '点顺延可整体后移一天';
+
+  const itemsHtml = entry
+    ? `<div class="exlist">${items.map((it) => {
+      const on = checked.includes(it.name);
+      return `<div class="ex ${on ? 'checked' : ''}" data-item="${it.name}">
+        <span class="exbox">${on ? '✓' : ''}</span>
+        <span class="en">${it.name}</span>
+        ${it.sets ? `<span class="es">${it.sets}</span>` : ''}
+      </div>`;
+    }).join('')}</div>`
+    : '';
+
+  const moodPills = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill mood-btn ${daily.mood === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('');
+  const workPills = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill work-btn ${daily.work === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('');
+
+  return `
+    <div class="day ${isToday ? 'today' : ''} ${!entry ? 'rest' : ''} ${isPeriod ? 'period-day' : ''} ${entry?.completed ? 'complete' : ''}" data-date="${dateStr}">
+      <div class="dhead">
+        <div class="date">
+          <div class="d">${date.getMonth() + 1}/${date.getDate()}</div>
+          <div class="w">${WEEKDAYS[date.getDay()]}</div>
+          ${isToday ? '<span class="tp">今天</span>' : ''}
+        </div>
+        <div class="info">
+          ${badge}<span class="doneflag">完成</span>
+          <div class="wtitle">${title}</div>
+          <div class="wsum">${summary}</div>
+        </div>
+        <span class="chev">${expanded ? '−' : '+'}</span>
+      </div>
+      <div class="dbody" style="display:${expanded ? 'block' : 'none'}">
+        ${itemsHtml}
+        <div class="status">
+          <div class="sh">心情(1-5)</div>
+          <div class="pillrow">${moodPills}</div>
+          <div class="sh">工作状态(1-5)</div>
+          <div class="pillrow">${workPills}</div>
+          <textarea class="note" placeholder="写点什么...">${daily.note || ''}</textarea>
+        </div>
+        <div class="actions">
+          <button type="button" class="act period-btn ${isPeriod ? 'on' : ''}">${isPeriod ? '经期 ✓' : '经期'}</button>
+          <button type="button" class="act postpone-btn">顺延</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindDayCards(container) {
+  container.addEventListener('click', (e) => {
+    const head = e.target.closest('.dhead');
+    const exRow = e.target.closest('.ex');
+    const moodBtn = e.target.closest('.mood-btn');
+    const workBtn = e.target.closest('.work-btn');
+    const periodBtn = e.target.closest('.period-btn');
+    const postponeBtn = e.target.closest('.postpone-btn');
+    const dayEl = e.target.closest('.day');
+    if (!dayEl) return;
+    const dateStr = dayEl.dataset.date;
+
+    if (head && !exRow) {
+      if (expandedDates.has(dateStr)) expandedDates.delete(dateStr);
+      else expandedDates.add(dateStr);
+      route();
+      return;
+    }
+    if (exRow) {
+      applyMutation((d) => { d.schedule = Schedule.toggleItem(d.schedule, dateStr, exRow.dataset.item); });
+      return;
+    }
+    if (moodBtn) {
+      const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
+      const mood = Number(moodBtn.dataset.v);
+      applyMutation((d) => { d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, mood, daily.work, daily.note); });
+      return;
+    }
+    if (workBtn) {
+      const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
+      const work = Number(workBtn.dataset.v);
+      applyMutation((d) => { d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, daily.mood, work, daily.note); });
+      return;
+    }
+    if (periodBtn) {
+      applyMutation((d) => {
+        d.periodLogs = d.periodLogs.includes(dateStr)
+          ? Period.removePeriodStart(d.periodLogs, dateStr)
+          : Period.addPeriodStart(d.periodLogs, dateStr);
+      });
+      return;
+    }
+    if (postponeBtn) {
+      applyMutation((d) => { d.schedule = Schedule.postpone(d.schedule, dateStr); });
+    }
+  });
+
+  container.addEventListener('change', (e) => {
+    if (!e.target.matches('.note')) return;
+    const dateStr = e.target.closest('.day').dataset.date;
+    const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
+    applyMutation((d) => { d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, daily.mood, daily.work, e.target.value); });
+  });
+}
+
+// ---------- views ----------
+
 function renderToday() {
   const container = document.getElementById('view-today');
   const today = todayStr();
-  const entry = Schedule.getEntry(state.data.schedule, today);
-  const daily = Mood.getDailyLog(state.data.dailyLogs, today) || { mood: null, note: '' };
-  const cycle = Period.getCycleInfo(state.data.periodLogs, today);
-
-  const bodyHtml = entry && entry.type === 'strength'
-    ? `<ul class="exercise-list">${Schedule.STRENGTH_EXERCISES.map((ex) => `<li><span>${ex.name}</span><span class="muted">${ex.sets}</span></li>`).join('')}</ul>`
-    : `<p>今天是有氧日:踏步机 90-120 分钟。可每 15-20 分钟穿插一组哑铃动作:${Schedule.CARDIO_ARM_MOVES.join('、')}(各 30-45 秒)。</p>`;
-
-  container.innerHTML = `
-    <h2>今天 · ${today}</h2>
-    <section class="card">
-      <h3>${entry ? (entry.type === 'cardio' ? '有氧日 🏃' : '力量日 💪') : '暂无安排'}</h3>
-      ${bodyHtml}
-      <div class="btn-row">
-        <button id="btn-complete" class="${entry?.completed ? 'primary' : ''}">${entry?.completed ? '✓ 已完成' : '标记完成'}</button>
-        <button id="btn-postpone" class="secondary">↷ 顺延一天</button>
-      </div>
-    </section>
-    <section class="card">
-      <h3>今日心情</h3>
-      <div class="mood-picker">
-        ${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="mood-btn ${daily.mood === n ? 'selected' : ''}" data-mood="${n}">${MOOD_EMOJI[n - 1]}</button>`).join('')}
-      </div>
-      <textarea id="mood-note" placeholder="今天发生了什么...">${daily.note || ''}</textarea>
-      <div class="btn-row">
-        <button id="btn-save-mood" class="primary">保存心情</button>
-      </div>
-    </section>
-    <section class="card">
-      <h3>生理期</h3>
-      ${cycle ? `<p>第 ${cycle.cycleDay} 天 · ${cycle.phase} · 平均周期 ${cycle.avgLength} 天</p>` : '<p class="muted">暂无记录</p>'}
-      <div class="btn-row">
-        <button id="btn-period-today" class="secondary">今天开始月经</button>
-      </div>
-    </section>
-  `;
-
-  document.getElementById('btn-complete').onclick = () => applyMutation((d) => {
-    d.schedule = Schedule.markComplete(d.schedule, today, !(entry && entry.completed));
-  });
-  document.getElementById('btn-postpone').onclick = () => applyMutation((d) => {
-    d.schedule = Schedule.postpone(d.schedule, today);
-  });
-  container.querySelectorAll('.mood-btn').forEach((btn) => {
-    btn.onclick = () => {
-      container.querySelectorAll('.mood-btn').forEach((b) => b.classList.remove('selected'));
-      btn.classList.add('selected');
-    };
-  });
-  document.getElementById('btn-save-mood').onclick = () => {
-    const selected = container.querySelector('.mood-btn.selected');
-    const mood = selected ? Number(selected.dataset.mood) : null;
-    const note = document.getElementById('mood-note').value;
-    applyMutation((d) => {
-      d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, today, mood, note);
-    });
-  };
-  document.getElementById('btn-period-today').onclick = () => applyMutation((d) => {
-    d.periodLogs = Period.addPeriodStart(d.periodLogs, today);
-  });
+  container.innerHTML = `<h2>今天 · ${today}</h2>${dayCardHtml(today, { expanded: true })}`;
+  bindDayCards(container);
 }
 
 function renderCalendar() {
   const container = document.getElementById('view-calendar');
   const year = calendarMonth.getFullYear();
   const month = calendarMonth.getMonth();
-  const startWeekday = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = todayStr();
 
-  let cells = '';
-  for (let i = 0; i < startWeekday; i += 1) cells += '<div class="cal-cell empty"></div>';
+  let done = 0;
+  let total = 0;
+  let cards = '';
   for (let d = 1; d <= daysInMonth; d += 1) {
     const dateStr = formatDate(new Date(year, month, d));
     const entry = Schedule.getEntry(state.data.schedule, dateStr);
-    const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr);
-    const isPeriod = state.data.periodLogs.includes(dateStr);
-    cells += `
-      <button type="button" class="cal-cell ${dateStr === today ? 'today' : ''}" data-date="${dateStr}">
-        <span class="cal-date">${d}</span>
-        ${entry ? `<span class="cal-type ${entry.completed ? 'done' : ''}">${entry.type === 'cardio' ? '🏃' : '💪'}</span>` : ''}
-        ${daily?.mood ? `<span class="cal-mood">${MOOD_EMOJI[daily.mood - 1]}</span>` : ''}
-        ${isPeriod ? '<span class="cal-period">🩸</span>' : ''}
-      </button>`;
+    if (entry) {
+      total += 1;
+      if (entry.completed) done += 1;
+    }
+    cards += dayCardHtml(dateStr, { expanded: expandedDates.has(dateStr) });
   }
+  const pct = total ? Math.round((done / total) * 100) : 0;
 
   container.innerHTML = `
     <div class="cal-header">
-      <button id="cal-prev" class="icon-btn">‹</button>
+      <button type="button" id="cal-prev" class="icon-btn">‹</button>
       <h2>${year}年${month + 1}月</h2>
-      <button id="cal-next" class="icon-btn">›</button>
+      <button type="button" id="cal-next" class="icon-btn">›</button>
     </div>
-    <div class="cal-weekdays">${['日', '一', '二', '三', '四', '五', '六'].map((w) => `<div>${w}</div>`).join('')}</div>
-    <div class="cal-grid">${cells}</div>
-    <div id="cal-detail" class="card hidden"></div>
+    <div class="stats">
+      <div class="stat">
+        <div class="big">${done}/${total}</div>
+        <div class="lbl">本月完成</div>
+        <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="mk">□</i>有氧</span>
+      <span><i class="mk">■</i>力量</span>
+      <span><i class="mk">▨</i>顺延</span>
+      <span><i class="mk">●</i>经期</span>
+    </div>
+    <div class="day-list">${cards}</div>
   `;
 
   document.getElementById('cal-prev').onclick = () => { calendarMonth = new Date(year, month - 1, 1); renderCalendar(); };
   document.getElementById('cal-next').onclick = () => { calendarMonth = new Date(year, month + 1, 1); renderCalendar(); };
-  container.querySelectorAll('.cal-cell[data-date]').forEach((cell) => {
-    cell.onclick = () => showDayDetail(cell.dataset.date);
-  });
-}
-
-function showDayDetail(dateStr) {
-  const detail = document.getElementById('cal-detail');
-  const entry = Schedule.getEntry(state.data.schedule, dateStr);
-  const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
-  const isPeriod = state.data.periodLogs.includes(dateStr);
-  detail.classList.remove('hidden');
-  detail.innerHTML = `
-    <h3>${dateStr}</h3>
-    <p>${entry ? (entry.type === 'cardio' ? '有氧日' : '力量日') + (entry.completed ? ' · 已完成' : ' · 未完成') : '无安排'}</p>
-    <p>心情:${daily.mood ? MOOD_EMOJI[daily.mood - 1] : '未记录'}${daily.note ? ' — ' + daily.note : ''}</p>
-    ${isPeriod ? '<p>🩸 经期开始日</p>' : ''}
-  `;
+  bindDayCards(container.querySelector('.day-list'));
 }
 
 function renderPeriod() {
@@ -200,13 +256,13 @@ function renderPeriod() {
         : '<p class="muted">暂无记录,添加第一条经期开始日期吧</p>'}
       <div class="btn-row">
         <input type="date" id="period-date-input" value="${todayStr()}">
-        <button id="btn-add-period" class="primary">记录经期开始</button>
+        <button type="button" id="btn-add-period" class="act on">记录经期开始</button>
       </div>
     </section>
     <section class="card">
       <h3>历史记录</h3>
       <ul class="period-list">
-        ${logs.length ? logs.map((d) => `<li>${d} <button class="link-btn" data-del="${d}">删除</button></li>`).join('') : '<li class="muted">无</li>'}
+        ${logs.length ? logs.map((d) => `<li>${d} <button type="button" class="link-btn" data-del="${d}">删除</button></li>`).join('') : '<li class="muted">无</li>'}
       </ul>
     </section>
   `;
@@ -239,15 +295,15 @@ function renderSettings() {
       <label>Personal Access Token</label>
       <input id="cfg-token" type="password" value="${cfg.token || ''}" placeholder="github_pat_...">
       <div class="btn-row">
-        <button id="btn-save-cfg" class="primary">保存并同步</button>
+        <button type="button" id="btn-save-cfg" class="act on">保存并同步</button>
       </div>
       <p class="muted">${statusText()}</p>
     </section>
     <section class="card">
       <h3>备份</h3>
       <div class="btn-row">
-        <button id="btn-export" class="secondary">导出 JSON</button>
-        <button id="btn-import" class="secondary">导入 JSON</button>
+        <button type="button" id="btn-export" class="act">导出 JSON</button>
+        <button type="button" id="btn-import" class="act">导入 JSON</button>
         <input type="file" id="file-import" accept="application/json" class="hidden">
       </div>
     </section>

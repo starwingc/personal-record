@@ -18,8 +18,21 @@ export const STRENGTH_EXERCISES = [
 
 export const CARDIO_ARM_MOVES = ['侧平举', '前平举', '竖直上举', '前平举内收'];
 
+export const CARDIO_ITEMS = [
+  { name: '踏步机 90-120分钟', sets: '' },
+  ...CARDIO_ARM_MOVES.map((name) => ({ name, sets: '2-3组 x 30-45秒' }))
+];
+
+export function getItemsForType(type) {
+  return type === 'strength' ? STRENGTH_EXERCISES : CARDIO_ITEMS;
+}
+
 function alternate(type) {
   return type === 'cardio' ? 'strength' : 'cardio';
+}
+
+function blankEntry(date, type) {
+  return { date, type, completed: false, checkedItems: [] };
 }
 
 export function generateInitial(startDate = todayStr(), windowDays = 45) {
@@ -27,7 +40,7 @@ export function generateInitial(startDate = todayStr(), windowDays = 45) {
   let type = 'cardio';
   let date = startDate;
   for (let i = 0; i < windowDays; i += 1) {
-    schedule.push({ date, type, completed: false });
+    schedule.push(blankEntry(date, type));
     date = addDays(date, 1);
     type = alternate(type);
   }
@@ -39,10 +52,10 @@ export function generateInitial(startDate = todayStr(), windowDays = 45) {
 export function ensureWindow(schedule, windowDays = 45, minBuffer = 20) {
   if (!schedule || schedule.length === 0) return generateInitial(todayStr(), windowDays);
   const today = todayStr();
-  const list = schedule.map((e) => ({ ...e }));
+  const list = schedule.map((e) => ({ ...e, checkedItems: e.checkedItems || [] }));
   while (diffDays(today, list[list.length - 1].date) < minBuffer) {
     const tail = list[list.length - 1];
-    list.push({ date: addDays(tail.date, 1), type: alternate(tail.type), completed: false });
+    list.push(blankEntry(addDays(tail.date, 1), alternate(tail.type)));
   }
   return list;
 }
@@ -55,13 +68,25 @@ export function getEntry(schedule, dateStr) {
   return schedule.find((e) => e.date === dateStr);
 }
 
-export function markComplete(schedule, dateStr, completed = true) {
-  return schedule.map((e) => (e.date === dateStr ? { ...e, completed } : e));
+// Toggles one checklist item for the given day. `completed` is derived
+// automatically: the day is "done" once every item on its checklist is
+// checked, rather than tracked as a separate manual flag.
+export function toggleItem(schedule, dateStr, itemName) {
+  return schedule.map((e) => {
+    if (e.date !== dateStr) return e;
+    const checked = e.checkedItems || [];
+    const nextChecked = checked.includes(itemName)
+      ? checked.filter((n) => n !== itemName)
+      : [...checked, itemName];
+    const total = getItemsForType(e.type).length;
+    return { ...e, checkedItems: nextChecked, completed: nextChecked.length >= total };
+  });
 }
 
 // Shifts the target day and every later entry forward by one calendar day,
 // then appends one new entry at the tail (continuing the alternation) so
 // the window length is unchanged. Period logs are untouched by design.
+// The vacated date simply has no schedule entry — rendered as a rest day.
 export function postpone(schedule, dateStr) {
   const idx = findIndexByDate(schedule, dateStr);
   if (idx === -1) return schedule;
@@ -70,6 +95,6 @@ export function postpone(schedule, dateStr) {
     list[i].date = addDays(list[i].date, 1);
   }
   const tail = list[list.length - 1];
-  list.push({ date: addDays(tail.date, 1), type: alternate(tail.type), completed: false });
+  list.push(blankEntry(addDays(tail.date, 1), alternate(tail.type)));
   return list;
 }

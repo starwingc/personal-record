@@ -1,6 +1,6 @@
-export function upsertDailyLog(dailyLogs, dateStr, mood, note) {
+export function upsertDailyLog(dailyLogs, dateStr, mood, work, note) {
   const idx = dailyLogs.findIndex((e) => e.date === dateStr);
-  const entry = { date: dateStr, mood, note };
+  const entry = { date: dateStr, mood, work, note };
   if (idx === -1) return [...dailyLogs, entry];
   const list = [...dailyLogs];
   list[idx] = entry;

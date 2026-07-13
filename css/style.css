@@ -1,0 +1,264 @@
+:root {
+  --bg: #f7f5f2;
+  --card-bg: #ffffff;
+  --text: #22201d;
+  --muted: #7a746c;
+  --border: #e6e1da;
+  --accent: #c9827a;
+  --accent-2: #6f9b8f;
+  --danger: #c9827a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17151a;
+    --card-bg: #221f26;
+    --text: #f0ece6;
+    --muted: #a49d94;
+    --border: #35313a;
+    --accent: #e0998f;
+    --accent-2: #8fbdb0;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding-top: 56px;
+  padding-bottom: 72px;
+}
+
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+
+.topbar h1 {
+  font-size: 17px;
+  margin: 0;
+}
+
+.sync-status {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+
+main#app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.view { display: none; }
+.view.active { display: block; }
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.card h3 { margin-top: 0; }
+
+.muted { color: var(--muted); font-size: 13px; }
+.hidden { display: none; }
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+button {
+  font: inherit;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.secondary {
+  background: transparent;
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+
+button.link-btn {
+  border: none;
+  background: none;
+  color: var(--danger);
+  padding: 0 0 0 8px;
+  font-size: 13px;
+}
+
+input, textarea {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+label {
+  font-size: 13px;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 4px;
+}
+
+textarea { min-height: 70px; resize: vertical; }
+
+.exercise-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.exercise-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.exercise-list li:last-child { border-bottom: none; }
+
+.mood-picker {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mood-btn {
+  flex: 1;
+  font-size: 22px;
+  padding: 8px 0;
+}
+
+.mood-btn.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, var(--card-bg));
+}
+
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cal-header h2 { font-size: 16px; margin: 0; }
+
+.icon-btn {
+  border: none;
+  background: none;
+  font-size: 20px;
+  padding: 4px 10px;
+}
+
+.cal-weekdays, .cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-weekdays {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 8px;
+  font-size: 11px;
+  padding: 2px;
+}
+
+.cal-cell.empty { border: none; background: none; }
+
+.cal-cell.today { border-color: var(--accent); border-width: 2px; }
+
+.cal-date { font-size: 12px; }
+
+.cal-type { font-size: 13px; opacity: 0.5; }
+.cal-type.done { opacity: 1; }
+
+.cal-mood, .cal-period { font-size: 11px; }
+
+.period-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.period-list li {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  z-index: 10;
+}
+
+.nav-btn {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nav-btn .icon { font-size: 18px; }
+
+.nav-btn.active { color: var(--accent); }

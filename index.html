@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Personal Record</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Personal Record</h1>
+    <div id="sync-status" class="sync-status">加载中…</div>
+  </header>
+
+  <main id="app">
+    <section id="view-today" class="view"></section>
+    <section id="view-calendar" class="view"></section>
+    <section id="view-period" class="view"></section>
+
+    <section id="view-guide" class="view">
+      <h2>饮食与训练指南</h2>
+
+      <section class="card">
+        <h3>核心原则</h3>
+        <p>已经规律训练 4 年、腹肌轮廓可见、大腿相对偏瘦 —— 这不是从零开始的增肌减脂阶段,而是"精修阶段"。目标是<strong>小幅度、可持续</strong>的体脂下降,避免流失来之不易的肌肉。以下建议都不需要知道体重,用相对量和习惯来把握。</p>
+        <ul>
+          <li>每餐优先蛋白质,用手掌大小估份量,而不是称重记克数。</li>
+          <li>力量训练即使只有 5lb,也可以靠"增加次数/组数、放慢离心、缩短组间休息、循环训练"持续制造训练量增长,不必靠加重量进阶。</li>
+          <li>饮食用餐盘法:半盘蔬菜、1/4 蛋白质、1/4 复合碳水;减少精加工食品和添加糖;把每餐分量精简 10-15% 来制造温和的热量缺口,而不是严格计数卡路里。</li>
+          <li>保证纤维、饮水、睡眠(7-8 小时)——睡眠直接影响激素和恢复,对"减脂不掉肌肉"很关键。</li>
+          <li>已有的大量有氧(隔天 90-120 分钟踏步机)不建议再加量,避免影响肌肉保留;可以在踏步的同时用 5lb 哑铃穿插做侧平举 / 前平举 / 竖直上举 / 前平举内收。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h3>结合生理周期调整</h3>
+        <ul>
+          <li><strong>卵泡期</strong>(经期结束到排卵前):精力通常较好,力量日可以适当增加强度或组数。</li>
+          <li><strong>黄体期</strong>(排卵后到下次经期):食欲增加、水分潴留是正常现象,可以适当增加复合碳水,不必因体重/围度波动焦虑;感觉疲惫时多用"顺延"功能。</li>
+          <li><strong>月经期</strong>:强度可以主动降低,多吃含铁食物,这个阶段可以放心多用"顺延"。</li>
+        </ul>
+        <p class="muted">周期阶段为估算,非医学诊断,身体感受始终优先。</p>
+      </section>
+
+      <section class="card">
+        <h3>6 个月分期</h3>
+        <ul>
+          <li><strong>第 1-2 月</strong>:建立习惯与打卡一致性,重点是蛋白质优先和坚持记录。</li>
+          <li><strong>第 3-4 月</strong>:适度收紧饮食质量与分量,力量日增加次数/组数/循环强度。</li>
+          <li><strong>第 5-6 月</strong>:通过照片、围度、衣服合身度(而不是只看体重)来复盘和微调。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h3>训练动作说明</h3>
+        <p><strong>有氧日</strong>(踏步机 90-120 分钟):每 15-20 分钟穿插一组哑铃动作,每个动作 30-45 秒:侧平举、前平举、竖直上举、前平举内收。</p>
+        <p><strong>力量日</strong>(20-30 分钟,徒手 + 2×5lb):</p>
+        <ul class="exercise-list">
+          <li><span>深蹲</span><span class="muted">3组 x 15次</span></li>
+          <li><span>臀桥 / 顶髋</span><span class="muted">3组 x 15次</span></li>
+          <li><span>后撤箭步蹲(左右各)</span><span class="muted">3组 x 10次</span></li>
+          <li><span>侧卧抬腿(左右各)</span><span class="muted">2组 x 15次</span></li>
+          <li><span>驴踢腿(左右各)</span><span class="muted">2组 x 15次</span></li>
+          <li><span>提踵</span><span class="muted">3组 x 20次</span></li>
+          <li><span>平板支撑</span><span class="muted">3组 x 30-45秒</span></li>
+          <li><span>死虫式</span><span class="muted">2组 x 12次</span></li>
+          <li><span>侧平举 / 前平举 / 竖直上举 / 前平举内收(5lb)</span><span class="muted">各 3组 x 12-15次</span></li>
+          <li><span>俯卧撑</span><span class="muted">3组 x 力竭前</span></li>
+        </ul>
+      </section>
+    </section>
+
+    <section id="view-settings" class="view"></section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn" data-view="today"><span class="icon">🏠</span><span>今天</span></button>
+    <button class="nav-btn" data-view="calendar"><span class="icon">📅</span><span>日历</span></button>
+    <button class="nav-btn" data-view="period"><span class="icon">🩸</span><span>生理期</span></button>
+    <button class="nav-btn" data-view="guide"><span class="icon">📖</span><span>指南</span></button>
+    <button class="nav-btn" data-view="settings"><span class="icon">⚙️</span><span>设置</span></button>
+  </nav>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

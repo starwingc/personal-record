@@ -25,6 +25,8 @@ function getDraft(dateStr) {
       mood: daily.mood,
       work: daily.work,
       note: daily.note || '',
+      lunchSnack: !!daily.lunchSnack,
+      dinnerSnack: !!daily.dinnerSnack,
       dirty: false
     };
   }
@@ -32,11 +34,11 @@ function getDraft(dateStr) {
 }
 
 async function saveDraft(dateStr) {
-  const { checkedItems, mood, work, note } = getDraft(dateStr);
+  const { checkedItems, mood, work, note, lunchSnack, dinnerSnack } = getDraft(dateStr);
   delete drafts[dateStr];
   await applyMutation((d) => {
     d.schedule = Schedule.setCheckedItems(d.schedule, dateStr, checkedItems);
-    d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, mood, work, note);
+    d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, { mood, work, note, lunchSnack, dinnerSnack });
   });
 }
 
@@ -155,6 +157,11 @@ function dayCardHtml(dateStr, { expanded }) {
           <div class="pillrow">${moodPills}</div>
           <div class="sh">工作状态(1-5)</div>
           <div class="pillrow">${workPills}</div>
+          <div class="sh">加餐</div>
+          <div class="pillrow">
+            <button type="button" class="pill wide snack-btn ${draft.lunchSnack ? 'on' : ''}" data-field="lunchSnack">午餐额外零食</button>
+            <button type="button" class="pill wide snack-btn ${draft.dinnerSnack ? 'on' : ''}" data-field="dinnerSnack">晚餐额外零食</button>
+          </div>
           <textarea class="note" placeholder="写点什么...">${draft.note || ''}</textarea>
           <button type="button" class="act save-btn ${draft.dirty ? 'on' : ''}">${draft.dirty ? '保存修改' : '已保存'}</button>
         </div>
@@ -172,6 +179,7 @@ function bindDayCards(container) {
     const exRow = e.target.closest('.ex');
     const moodBtn = e.target.closest('.mood-btn');
     const workBtn = e.target.closest('.work-btn');
+    const snackBtn = e.target.closest('.snack-btn');
     const saveBtn = e.target.closest('.save-btn');
     const periodBtn = e.target.closest('.period-btn');
     const postponeBtn = e.target.closest('.postpone-btn');
@@ -208,6 +216,14 @@ function bindDayCards(container) {
     if (workBtn) {
       const draft = getDraft(dateStr);
       draft.work = Number(workBtn.dataset.v);
+      draft.dirty = true;
+      route();
+      return;
+    }
+    if (snackBtn) {
+      const draft = getDraft(dateStr);
+      const field = snackBtn.dataset.field;
+      draft[field] = !draft[field];
       draft.dirty = true;
       route();
       return;

@@ -105,24 +105,44 @@ function writeLocal(data) {
   localStorage.setItem(LOCAL_DATA_KEY, JSON.stringify(data));
 }
 
-export async function loadData() {
-  const cfg = getConfig();
-  if (!isConfigured()) {
-    return { data: readLocal(), mode: 'local' };
-  }
-  const { data } = await readRemote(cfg);
-  return { data, mode: 'remote' };
-}
-
 function wait(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
+// Retries on *any* failure — a 409 conflict, a transient network drop
+// ("Load failed" in Safari), rate limiting, etc. — not just sha conflicts.
+// Mobile browsers occasionally fail a single fetch for reasons that have
+// nothing to do with GitHub; without a broad retry here, one flaky request
+// would surface as a hard sync error instead of quietly resolving itself.
+async function withRetry(fn, maxRetries) {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (attempt < maxRetries) {
+        attempt += 1;
+        await wait(150 * attempt + Math.random() * 200);
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+export async function loadData({ maxRetries = 3 } = {}) {
+  const cfg = getConfig();
+  if (!isConfigured()) {
+    return { data: readLocal(), mode: 'local' };
+  }
+  const { data } = await withRetry(() => readRemote(cfg), maxRetries);
+  return { data, mode: 'remote' };
+}
+
 // Applies `mutationFn` to the freshest copy of the data and persists the
-// result. Remote writes are re-applied against the latest sha on 409
-// (concurrent edit from the other device) rather than merging documents.
-// A short randomized backoff before each retry keeps two devices writing
-// around the same moment from repeatedly colliding on the same sha.
+// result. Each attempt re-reads the latest data immediately before writing,
+// so a retry after either a conflict or a network hiccup always re-applies
+// the mutation against the current sha rather than a stale one.
 export async function mutate(mutationFn, { maxRetries = 4 } = {}) {
   const cfg = getConfig();
   if (!isConfigured()) {
@@ -132,21 +152,11 @@ export async function mutate(mutationFn, { maxRetries = 4 } = {}) {
     writeLocal(next);
     return { data: next, mode: 'local' };
   }
-  let attempt = 0;
-  for (;;) {
+  return withRetry(async () => {
     const { data, sha } = await readRemote(cfg);
     const next = mutationFn(data) || data;
     next.meta = { lastUpdated: new Date().toISOString() };
-    try {
-      await writeRemote(cfg, next, sha);
-      return { data: next, mode: 'remote' };
-    } catch (e) {
-      if (e.conflict && attempt < maxRetries) {
-        attempt += 1;
-        await wait(150 * attempt + Math.random() * 200);
-        continue;
-      }
-      throw e;
-    }
-  }
+    await writeRemote(cfg, next, sha);
+    return { data: next, mode: 'remote' };
+  }, maxRetries);
 }

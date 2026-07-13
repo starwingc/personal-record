@@ -272,6 +272,7 @@ textarea { min-height: 60px; resize: vertical; }
 .pillrow { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 11px; }
 .pill { border: 2px solid var(--ink); background: var(--paper); color: var(--ink); padding: 7px 0; font-size: 14px; font-weight: 800; flex: 1; min-width: 36px; text-align: center; }
 .pill.on { background: var(--ink); color: var(--paper); }
+.pill.wide { font-size: 13px; padding: 9px 4px; }
 
 .note { margin-bottom: 0; }
 

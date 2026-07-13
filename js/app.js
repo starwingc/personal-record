@@ -1,8 +1,12 @@
-import * as GH from './github-api.js';
-import * as Schedule from './schedule.js';
-import * as Period from './period.js';
-import * as Mood from './mood.js';
-import { todayStr, formatDate, parseDate } from './date-utils.js';
+// The ?v= query string on every local import/link (kept in sync across
+// index.html and these imports) exists purely to bust GitHub Pages' 10-min
+// browser cache on deploy — mobile Safari has no real hard-refresh gesture,
+// so without this a phone can keep serving yesterday's JS after an update.
+import * as GH from './github-api.js?v=7';
+import * as Schedule from './schedule.js?v=7';
+import * as Period from './period.js?v=7';
+import * as Mood from './mood.js?v=7';
+import { todayStr, formatDate, parseDate } from './date-utils.js?v=7';
 
 const VIEWS = ['today', 'calendar', 'period', 'guide', 'settings'];
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -27,6 +31,7 @@ function getDraft(dateStr) {
       note: daily.note || '',
       lunchSnack: !!daily.lunchSnack,
       dinnerSnack: !!daily.dinnerSnack,
+      noSnackDay: !!daily.noSnackDay,
       dirty: false
     };
   }
@@ -34,11 +39,11 @@ function getDraft(dateStr) {
 }
 
 async function saveDraft(dateStr) {
-  const { checkedItems, mood, work, note, lunchSnack, dinnerSnack } = getDraft(dateStr);
+  const { checkedItems, mood, work, note, lunchSnack, dinnerSnack, noSnackDay } = getDraft(dateStr);
   delete drafts[dateStr];
   await applyMutation((d) => {
     d.schedule = Schedule.setCheckedItems(d.schedule, dateStr, checkedItems);
-    d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, { mood, work, note, lunchSnack, dinnerSnack });
+    d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, { mood, work, note, lunchSnack, dinnerSnack, noSnackDay });
   });
 }
 
@@ -161,6 +166,7 @@ function dayCardHtml(dateStr, { expanded }) {
           <div class="pillrow">
             <button type="button" class="pill wide snack-btn ${draft.lunchSnack ? 'on' : ''}" data-field="lunchSnack">午餐额外零食</button>
             <button type="button" class="pill wide snack-btn ${draft.dinnerSnack ? 'on' : ''}" data-field="dinnerSnack">晚餐额外零食</button>
+            <button type="button" class="pill wide snack-btn ${draft.noSnackDay ? 'on' : ''}" data-field="noSnackDay">全天无额外零食</button>
           </div>
           <textarea class="note" placeholder="写点什么...">${draft.note || ''}</textarea>
           <button type="button" class="act save-btn ${draft.dirty ? 'on' : ''}">${draft.dirty ? '保存修改' : '已保存'}</button>
@@ -224,6 +230,14 @@ function bindDayCards(container) {
       const draft = getDraft(dateStr);
       const field = snackBtn.dataset.field;
       draft[field] = !draft[field];
+      // "全天无额外零食" and "午餐/晚餐额外零食" contradict each other —
+      // turning one on clears the other side.
+      if (field === 'noSnackDay' && draft.noSnackDay) {
+        draft.lunchSnack = false;
+        draft.dinnerSnack = false;
+      } else if (field !== 'noSnackDay' && draft[field]) {
+        draft.noSnackDay = false;
+      }
       draft.dirty = true;
       route();
       return;
@@ -267,6 +281,30 @@ function renderToday() {
   bindDayCards(container);
 }
 
+function monthGridHtml(year, month) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startWeekday = new Date(year, month, 1).getDay();
+  const today = todayStr();
+
+  let cells = '';
+  for (let i = 0; i < startWeekday; i += 1) cells += '<div class="grid-cell empty"></div>';
+  for (let d = 1; d <= daysInMonth; d += 1) {
+    const dateStr = formatDate(new Date(year, month, d));
+    const entry = Schedule.getEntry(state.data.schedule, dateStr);
+    const isPeriod = state.data.periodLogs.includes(dateStr);
+    const mark = entry ? (entry.type === 'cardio' ? '□' : '■') : '·';
+    cells += `
+      <button type="button" class="grid-cell ${dateStr === today ? 'today' : ''} ${!entry ? 'rest' : ''} ${entry?.completed ? 'complete' : ''} ${isPeriod ? 'period' : ''}" data-date="${dateStr}">
+        <span class="gd">${d}</span>
+        <span class="gm">${mark}</span>
+      </button>`;
+  }
+  return `
+    <div class="grid-weekdays">${WEEKDAYS.map((w) => `<div>${w}</div>`).join('')}</div>
+    <div class="month-grid">${cells}</div>
+  `;
+}
+
 function renderCalendar() {
   const container = document.getElementById('view-calendar');
   const year = calendarMonth.getFullYear();
@@ -293,6 +331,7 @@ function renderCalendar() {
       <h2>${year}年${month + 1}月</h2>
       <button type="button" id="cal-next" class="icon-btn">›</button>
     </div>
+    ${monthGridHtml(year, month)}
     <div class="stats">
       <div class="stat">
         <div class="big">${done}/${total}</div>
@@ -303,7 +342,8 @@ function renderCalendar() {
     <div class="legend">
       <span><i class="mk">□</i>有氧</span>
       <span><i class="mk">■</i>力量</span>
-      <span><i class="mk">▨</i>顺延</span>
+      <span><i class="mk">·</i>顺延</span>
+      <span><i class="mk grid-swatch"></i>已完成</span>
       <span><i class="mk">●</i>经期</span>
     </div>
     <div class="day-list">${cards}</div>
@@ -311,6 +351,14 @@ function renderCalendar() {
 
   document.getElementById('cal-prev').onclick = () => { calendarMonth = new Date(year, month - 1, 1); renderCalendar(); };
   document.getElementById('cal-next').onclick = () => { calendarMonth = new Date(year, month + 1, 1); renderCalendar(); };
+  container.querySelectorAll('.grid-cell[data-date]').forEach((cell) => {
+    cell.onclick = () => {
+      const dateStr = cell.dataset.date;
+      expandedDates.add(dateStr);
+      renderCalendar();
+      document.querySelector(`.day-list .day[data-date="${dateStr}"]`)?.scrollIntoView({ block: 'center' });
+    };
+  });
   bindDayCards(container.querySelector('.day-list'));
 }
 

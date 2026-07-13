@@ -300,6 +300,30 @@ textarea { min-height: 60px; resize: vertical; }
 .ex .es { font-weight: 800; font-size: 12px; color: var(--mid); flex-shrink: 0; }
 
 .save-btn { width: 100%; margin-top: 10px; }
+.save-btn.saving { color: var(--mid); cursor: default; }
+
+.day.saving .exlist,
+.day.saving .pillrow,
+.day.saving .note {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* The one deliberate exception to the no-animation rule: a spinner is the
+   clearest way to say "still saving, wait a moment" for a network request
+   of unknown length. Kept small and only shown while a save is in flight. */
+@keyframes pr-spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--soft);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+  animation: pr-spin 0.7s linear infinite !important;
+}
 
 .status { border-top: 2px solid var(--ink); padding: 12px 13px; }
 .sh { font-size: 12px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 7px; }
@@ -339,6 +363,23 @@ textarea { min-height: 60px; resize: vertical; }
   font-size: 14px;
 }
 .exercise-list li:first-child { border-top: none; }
+
+.toast {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: var(--ink);
+  color: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  max-width: calc(100% - 32px);
+}
+.toast.hidden { display: none; }
 
 .bottom-nav {
   position: fixed;

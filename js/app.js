@@ -2,14 +2,36 @@
 // index.html and these imports) exists purely to bust GitHub Pages' 10-min
 // browser cache on deploy — mobile Safari has no real hard-refresh gesture,
 // so without this a phone can keep serving yesterday's JS after an update.
-import * as GH from './github-api.js?v=7';
-import * as Schedule from './schedule.js?v=7';
-import * as Period from './period.js?v=7';
-import * as Mood from './mood.js?v=7';
-import { todayStr, formatDate, parseDate } from './date-utils.js?v=7';
+import * as GH from './github-api.js?v=8';
+import * as Schedule from './schedule.js?v=8';
+import * as Period from './period.js?v=8';
+import * as Mood from './mood.js?v=8';
+import { todayStr, formatDate, parseDate } from './date-utils.js?v=8';
 
 const VIEWS = ['today', 'calendar', 'period', 'guide', 'settings'];
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+
+const ENCOURAGEMENTS = [
+  '很好,继续保持',
+  '又完成一项,坚持住',
+  '你在变得更好',
+  '为自己鼓个掌',
+  '稳住,一步一步来',
+  '你做到了',
+  '身体在感谢你的坚持',
+  '每一次打卡都算数',
+  '不错,再接再厉'
+];
+
+let toastTimer = null;
+function showToast(text) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 1800);
+}
 
 const state = { data: null, mode: 'local', error: null };
 let calendarMonth = new Date();
@@ -38,13 +60,26 @@ function getDraft(dateStr) {
   return drafts[dateStr];
 }
 
+// Marks the draft "saving" (rendered as a disabled spinner button, locked
+// against further taps) instead of deleting it immediately: if it were
+// deleted up front, any tap on this card while the request is still in
+// flight would call getDraft() again and silently rebuild a fresh draft
+// from the not-yet-updated state.data, racing with the save in progress.
 async function saveDraft(dateStr) {
-  const { checkedItems, mood, work, note, lunchSnack, dinnerSnack, noSnackDay } = getDraft(dateStr);
-  delete drafts[dateStr];
+  const draft = getDraft(dateStr);
+  const { checkedItems, mood, work, note, lunchSnack, dinnerSnack, noSnackDay } = draft;
+  draft.saving = true;
+  route();
   await applyMutation((d) => {
     d.schedule = Schedule.setCheckedItems(d.schedule, dateStr, checkedItems);
     d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, { mood, work, note, lunchSnack, dinnerSnack, noSnackDay });
   });
+  if (state.error) {
+    draft.saving = false;
+  } else {
+    delete drafts[dateStr];
+  }
+  route();
 }
 
 function statusText() {
@@ -141,7 +176,7 @@ function dayCardHtml(dateStr, { expanded }) {
   const workPills = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill work-btn ${draft.work === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('');
 
   return `
-    <div class="day ${isToday ? 'today' : ''} ${!entry ? 'rest' : ''} ${isPeriod ? 'period-day' : ''} ${isComplete ? 'complete' : ''}" data-date="${dateStr}">
+    <div class="day ${isToday ? 'today' : ''} ${!entry ? 'rest' : ''} ${isPeriod ? 'period-day' : ''} ${isComplete ? 'complete' : ''} ${draft.saving ? 'saving' : ''}" data-date="${dateStr}">
       <div class="dhead">
         <div class="date">
           <div class="d">${date.getMonth() + 1}/${date.getDate()}</div>
@@ -168,8 +203,10 @@ function dayCardHtml(dateStr, { expanded }) {
             <button type="button" class="pill wide snack-btn ${draft.dinnerSnack ? 'on' : ''}" data-field="dinnerSnack">晚餐额外零食</button>
             <button type="button" class="pill wide snack-btn ${draft.noSnackDay ? 'on' : ''}" data-field="noSnackDay">全天无额外零食</button>
           </div>
-          <textarea class="note" placeholder="写点什么...">${draft.note || ''}</textarea>
-          <button type="button" class="act save-btn ${draft.dirty ? 'on' : ''}">${draft.dirty ? '保存修改' : '已保存'}</button>
+          <textarea class="note" placeholder="写点什么..." ${draft.saving ? 'disabled' : ''}>${draft.note || ''}</textarea>
+          ${draft.saving
+            ? '<button type="button" class="act save-btn saving" disabled><span class="spinner"></span>保存中,请稍候…</button>'
+            : `<button type="button" class="act save-btn ${draft.dirty ? 'on' : ''}">${draft.dirty ? '保存修改' : '已保存'}</button>`}
         </div>
         <div class="actions">
           <button type="button" class="act period-btn ${isPeriod ? 'on' : ''}">${isPeriod ? '经期 ✓' : '经期'}</button>
@@ -199,16 +236,28 @@ function bindDayCards(container) {
       route();
       return;
     }
+    // While this date's save request is in flight, ignore further taps on
+    // it (expand/collapse above is still fine) — otherwise a tap here would
+    // rebuild the draft from data that hasn't caught up with the save yet.
+    if (getDraft(dateStr).saving) return;
+
     // Checkbox/mood/work taps only edit the local draft — nothing is sent
     // to GitHub until "保存" is pressed, so ticking off a whole list of
     // exercises costs one write instead of one per tap.
     if (exRow) {
       const draft = getDraft(dateStr);
       const name = exRow.dataset.item;
-      draft.checkedItems = draft.checkedItems.includes(name)
+      const wasChecked = draft.checkedItems.includes(name);
+      draft.checkedItems = wasChecked
         ? draft.checkedItems.filter((n) => n !== name)
         : [...draft.checkedItems, name];
       draft.dirty = true;
+      if (!wasChecked) {
+        const entry = Schedule.getEntry(state.data.schedule, dateStr);
+        const total = entry ? Schedule.getItemsForType(entry.type).length : 0;
+        const allDone = total > 0 && draft.checkedItems.length >= total;
+        showToast(allDone ? '今天全部完成了,很了不起' : ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]);
+      }
       route();
       return;
     }
@@ -265,6 +314,7 @@ function bindDayCards(container) {
     if (!e.target.matches('.note')) return;
     const dayEl = e.target.closest('.day');
     const draft = getDraft(dayEl.dataset.date);
+    if (draft.saving) return;
     draft.note = e.target.value;
     draft.dirty = true;
     const btn = dayEl.querySelector('.save-btn');

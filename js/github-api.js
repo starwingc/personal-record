@@ -53,7 +53,15 @@ export function emptyData() {
 }
 
 async function readRemote(cfg) {
-  const res = await fetch(`${apiUrl(cfg)}?ref=${cfg.branch}`, { headers: authHeaders(cfg) });
+  // cache: 'no-store' + a cache-busting param: without this, the browser can
+  // serve a stale cached response (or a 304 revalidated against a stale
+  // local copy), handing back an outdated sha that will never match on
+  // write — every retry would then keep re-reading the same stale sha and
+  // conflict forever, no matter how many times we retry.
+  const res = await fetch(`${apiUrl(cfg)}?ref=${cfg.branch}&_=${Date.now()}`, {
+    headers: authHeaders(cfg),
+    cache: 'no-store'
+  });
   if (res.status === 404) {
     return { data: emptyData(), sha: null };
   }

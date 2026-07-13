@@ -11,6 +11,35 @@ const state = { data: null, mode: 'local', error: null };
 let calendarMonth = new Date();
 const expandedDates = new Set([todayStr()]);
 
+// Local, unsaved edits per date. Checkbox/mood/work/note changes only touch
+// this in-memory draft; nothing is written to GitHub until the day card's
+// "保存" button is pressed, which commits the whole draft in one request.
+const drafts = {};
+
+function getDraft(dateStr) {
+  if (!drafts[dateStr]) {
+    const entry = Schedule.getEntry(state.data.schedule, dateStr);
+    const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
+    drafts[dateStr] = {
+      checkedItems: [...(entry?.checkedItems || [])],
+      mood: daily.mood,
+      work: daily.work,
+      note: daily.note || '',
+      dirty: false
+    };
+  }
+  return drafts[dateStr];
+}
+
+async function saveDraft(dateStr) {
+  const { checkedItems, mood, work, note } = getDraft(dateStr);
+  delete drafts[dateStr];
+  await applyMutation((d) => {
+    d.schedule = Schedule.setCheckedItems(d.schedule, dateStr, checkedItems);
+    d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, mood, work, note);
+  });
+}
+
 function statusText() {
   if (state.error) return `同步失败: ${state.error}`;
   const modeLabel = state.mode === 'local' ? '本地模式(未配置 GitHub)' : 'GitHub 已同步';
@@ -72,9 +101,9 @@ function route() {
 function dayCardHtml(dateStr, { expanded }) {
   const date = parseDate(dateStr);
   const entry = Schedule.getEntry(state.data.schedule, dateStr);
-  const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
   const isPeriod = state.data.periodLogs.includes(dateStr);
   const isToday = dateStr === todayStr();
+  const draft = getDraft(dateStr);
 
   const badge = !entry
     ? '<span class="badge r">顺延</span>'
@@ -83,7 +112,8 @@ function dayCardHtml(dateStr, { expanded }) {
   const title = !entry ? '休息日 · 计划已顺延' : (entry.type === 'cardio' ? '有氧日' : '力量日');
 
   const items = entry ? Schedule.getItemsForType(entry.type) : [];
-  const checked = entry?.checkedItems || [];
+  const checked = draft.checkedItems;
+  const isComplete = !!entry && items.length > 0 && checked.length >= items.length;
   const summary = entry ? `${checked.length}/${items.length}` : '点顺延可整体后移一天';
 
   const itemsHtml = entry
@@ -91,17 +121,20 @@ function dayCardHtml(dateStr, { expanded }) {
       const on = checked.includes(it.name);
       return `<div class="ex ${on ? 'checked' : ''}" data-item="${it.name}">
         <span class="exbox">${on ? '✓' : ''}</span>
-        <span class="en">${it.name}</span>
+        <div class="en-wrap">
+          <span class="en">${it.name}</span>
+          ${it.desc ? `<span class="edesc">${it.desc}</span>` : ''}
+        </div>
         ${it.sets ? `<span class="es">${it.sets}</span>` : ''}
       </div>`;
     }).join('')}</div>`
     : '';
 
-  const moodPills = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill mood-btn ${daily.mood === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('');
-  const workPills = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill work-btn ${daily.work === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('');
+  const moodPills = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill mood-btn ${draft.mood === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('');
+  const workPills = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill work-btn ${draft.work === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('');
 
   return `
-    <div class="day ${isToday ? 'today' : ''} ${!entry ? 'rest' : ''} ${isPeriod ? 'period-day' : ''} ${entry?.completed ? 'complete' : ''}" data-date="${dateStr}">
+    <div class="day ${isToday ? 'today' : ''} ${!entry ? 'rest' : ''} ${isPeriod ? 'period-day' : ''} ${isComplete ? 'complete' : ''}" data-date="${dateStr}">
       <div class="dhead">
         <div class="date">
           <div class="d">${date.getMonth() + 1}/${date.getDate()}</div>
@@ -122,7 +155,8 @@ function dayCardHtml(dateStr, { expanded }) {
           <div class="pillrow">${moodPills}</div>
           <div class="sh">工作状态(1-5)</div>
           <div class="pillrow">${workPills}</div>
-          <textarea class="note" placeholder="写点什么...">${daily.note || ''}</textarea>
+          <textarea class="note" placeholder="写点什么...">${draft.note || ''}</textarea>
+          <button type="button" class="act save-btn ${draft.dirty ? 'on' : ''}">${draft.dirty ? '保存修改' : '已保存'}</button>
         </div>
         <div class="actions">
           <button type="button" class="act period-btn ${isPeriod ? 'on' : ''}">${isPeriod ? '经期 ✓' : '经期'}</button>
@@ -138,6 +172,7 @@ function bindDayCards(container) {
     const exRow = e.target.closest('.ex');
     const moodBtn = e.target.closest('.mood-btn');
     const workBtn = e.target.closest('.work-btn');
+    const saveBtn = e.target.closest('.save-btn');
     const periodBtn = e.target.closest('.period-btn');
     const postponeBtn = e.target.closest('.postpone-btn');
     const dayEl = e.target.closest('.day');
@@ -150,22 +185,39 @@ function bindDayCards(container) {
       route();
       return;
     }
+    // Checkbox/mood/work taps only edit the local draft — nothing is sent
+    // to GitHub until "保存" is pressed, so ticking off a whole list of
+    // exercises costs one write instead of one per tap.
     if (exRow) {
-      applyMutation((d) => { d.schedule = Schedule.toggleItem(d.schedule, dateStr, exRow.dataset.item); });
+      const draft = getDraft(dateStr);
+      const name = exRow.dataset.item;
+      draft.checkedItems = draft.checkedItems.includes(name)
+        ? draft.checkedItems.filter((n) => n !== name)
+        : [...draft.checkedItems, name];
+      draft.dirty = true;
+      route();
       return;
     }
     if (moodBtn) {
-      const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
-      const mood = Number(moodBtn.dataset.v);
-      applyMutation((d) => { d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, mood, daily.work, daily.note); });
+      const draft = getDraft(dateStr);
+      draft.mood = Number(moodBtn.dataset.v);
+      draft.dirty = true;
+      route();
       return;
     }
     if (workBtn) {
-      const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
-      const work = Number(workBtn.dataset.v);
-      applyMutation((d) => { d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, daily.mood, work, daily.note); });
+      const draft = getDraft(dateStr);
+      draft.work = Number(workBtn.dataset.v);
+      draft.dirty = true;
+      route();
       return;
     }
+    if (saveBtn) {
+      saveDraft(dateStr);
+      return;
+    }
+    // Period and postpone stay immediate: they're deliberate, infrequent
+    // actions rather than something you'd tick off repeatedly.
     if (periodBtn) {
       applyMutation((d) => {
         d.periodLogs = d.periodLogs.includes(dateStr)
@@ -179,11 +231,14 @@ function bindDayCards(container) {
     }
   });
 
-  container.addEventListener('change', (e) => {
+  container.addEventListener('input', (e) => {
     if (!e.target.matches('.note')) return;
-    const dateStr = e.target.closest('.day').dataset.date;
-    const daily = Mood.getDailyLog(state.data.dailyLogs, dateStr) || {};
-    applyMutation((d) => { d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, daily.mood, daily.work, e.target.value); });
+    const dayEl = e.target.closest('.day');
+    const draft = getDraft(dayEl.dataset.date);
+    draft.note = e.target.value;
+    draft.dirty = true;
+    const btn = dayEl.querySelector('.save-btn');
+    if (btn) { btn.classList.add('on'); btn.textContent = '保存修改'; }
   });
 }
 

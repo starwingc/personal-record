@@ -1,26 +1,27 @@
 import { todayStr, addDays, diffDays } from './date-utils.js';
 
 export const STRENGTH_EXERCISES = [
-  { name: '深蹲', sets: '3组 x 15次' },
-  { name: '臀桥 / 顶髋', sets: '3组 x 15次' },
-  { name: '后撤箭步蹲(左右各)', sets: '3组 x 10次' },
-  { name: '侧卧抬腿(左右各)', sets: '2组 x 15次' },
-  { name: '驴踢腿(左右各)', sets: '2组 x 15次' },
-  { name: '提踵', sets: '3组 x 20次' },
-  { name: '平板支撑', sets: '3组 x 30-45秒' },
-  { name: '死虫式', sets: '2组 x 12次' },
-  { name: '侧平举(5lb)', sets: '3组 x 12-15次' },
-  { name: '前平举(5lb)', sets: '3组 x 12-15次' },
-  { name: '竖直上举(5lb)', sets: '3组 x 12-15次' },
-  { name: '前平举内收(5lb)', sets: '3组 x 12-15次' },
-  { name: '俯卧撑', sets: '3组 x 力竭前' }
+  { name: '深蹲', sets: '3组 x 15次', desc: '双脚与肩同宽,臀部向后向下坐,膝盖不超过脚尖' },
+  { name: '臀桥 / 顶髋', sets: '3组 x 15次', desc: '仰卧屈膝,臀部发力向上顶起,顶端停顿一下' },
+  { name: '后撤箭步蹲(左右各)', sets: '3组 x 10次', desc: '一脚向后撤一大步,后膝轻触地面再站起' },
+  { name: '侧卧抬腿(左右各)', sets: '2组 x 15次', desc: '侧躺,上方腿伸直向上抬起,再缓慢放下' },
+  { name: '驴踢腿(左右各)', sets: '2组 x 15次', desc: '跪姿撑地,一侧膝盖屈曲向后上方蹬起' },
+  { name: '提踵', sets: '3组 x 20次', desc: '双脚站立,脚跟提起至最高点,再缓慢放下' },
+  { name: '平板支撑', sets: '3组 x 30-45秒', desc: '手肘撑地,身体呈一条直线,收紧核心' },
+  { name: '死虫式', sets: '2组 x 12次', desc: '仰卧屈膝屈肘,对侧手脚缓慢伸展再收回' },
+  { name: '侧平举(5lb)', sets: '3组 x 12-15次', desc: '双手持哑铃,手臂伸直向两侧抬至肩高' },
+  { name: '前平举(5lb)', sets: '3组 x 12-15次', desc: '双手持哑铃,手臂伸直向前抬至肩高' },
+  { name: '竖直上举(5lb)', sets: '3组 x 12-15次', desc: '双手持哑铃,手臂从体侧向上举过头顶' },
+  { name: '前平举内收(5lb)', sets: '3组 x 12-15次', desc: '手臂抬至胸前高度,向内收拢再打开' },
+  { name: '俯卧撑', sets: '3组 x 力竭前', desc: '双手与肩同宽撑地,身体呈直线屈臂下压' }
 ];
 
-export const CARDIO_ARM_MOVES = ['侧平举', '前平举', '竖直上举', '前平举内收'];
-
 export const CARDIO_ITEMS = [
-  { name: '踏步机 90-120分钟', sets: '' },
-  ...CARDIO_ARM_MOVES.map((name) => ({ name, sets: '2-3组 x 30-45秒' }))
+  { name: '踏步机 90-120分钟', sets: '', desc: '保持匀速,可结合下面的哑铃动作每15-20分钟穿插一次' },
+  { name: '侧平举', sets: '2-3组 x 30-45秒', desc: '双手持哑铃,手臂伸直向两侧抬至肩高' },
+  { name: '前平举', sets: '2-3组 x 30-45秒', desc: '双手持哑铃,手臂伸直向前抬至肩高' },
+  { name: '竖直上举', sets: '2-3组 x 30-45秒', desc: '双手持哑铃,手臂从体侧向上举过头顶' },
+  { name: '前平举内收', sets: '2-3组 x 30-45秒', desc: '手臂抬至胸前高度,向内收拢再打开' }
 ];
 
 export function getItemsForType(type) {
@@ -68,18 +69,16 @@ export function getEntry(schedule, dateStr) {
   return schedule.find((e) => e.date === dateStr);
 }
 
-// Toggles one checklist item for the given day. `completed` is derived
+// Replaces the full checklist selection for the given day in one go (used
+// by the "save" action, which commits a batch of local checkbox edits
+// rather than writing on every single tap). `completed` is derived
 // automatically: the day is "done" once every item on its checklist is
-// checked, rather than tracked as a separate manual flag.
-export function toggleItem(schedule, dateStr, itemName) {
+// checked.
+export function setCheckedItems(schedule, dateStr, checkedItems) {
   return schedule.map((e) => {
     if (e.date !== dateStr) return e;
-    const checked = e.checkedItems || [];
-    const nextChecked = checked.includes(itemName)
-      ? checked.filter((n) => n !== itemName)
-      : [...checked, itemName];
     const total = getItemsForType(e.type).length;
-    return { ...e, checkedItems: nextChecked, completed: nextChecked.length >= total };
+    return { ...e, checkedItems, completed: checkedItems.length >= total };
   });
 }
 

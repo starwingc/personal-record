@@ -258,9 +258,13 @@ textarea { min-height: 60px; resize: vertical; }
   font-weight: 800;
 }
 .ex.checked .exbox { background: var(--ink); color: var(--paper); }
-.ex .en { flex: 1; font-weight: 600; }
+.en-wrap { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ex .en { font-weight: 600; }
 .ex.checked .en { color: var(--mid); text-decoration: line-through; }
-.ex .es { font-weight: 800; font-size: 12px; color: var(--mid); }
+.ex .edesc { font-size: 11px; font-weight: 500; color: var(--mid); }
+.ex .es { font-weight: 800; font-size: 12px; color: var(--mid); flex-shrink: 0; }
+
+.save-btn { width: 100%; margin-top: 10px; }
 
 .status { border-top: 2px solid var(--ink); padding: 12px 13px; }
 .sh { font-size: 12px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 7px; }

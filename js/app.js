@@ -2,11 +2,11 @@
 // index.html and these imports) exists purely to bust GitHub Pages' 10-min
 // browser cache on deploy — mobile Safari has no real hard-refresh gesture,
 // so without this a phone can keep serving yesterday's JS after an update.
-import * as GH from './github-api.js?v=8';
-import * as Schedule from './schedule.js?v=8';
-import * as Period from './period.js?v=8';
-import * as Mood from './mood.js?v=8';
-import { todayStr, formatDate, parseDate } from './date-utils.js?v=8';
+import * as GH from './github-api.js?v=9';
+import * as Schedule from './schedule.js?v=9';
+import * as Period from './period.js?v=9';
+import * as Mood from './mood.js?v=9';
+import { todayStr, formatDate, parseDate } from './date-utils.js?v=9';
 
 const VIEWS = ['today', 'calendar', 'period', 'guide', 'settings'];
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -51,8 +51,8 @@ function getDraft(dateStr) {
       mood: daily.mood,
       work: daily.work,
       note: daily.note || '',
-      lunchSnack: !!daily.lunchSnack,
-      dinnerSnack: !!daily.dinnerSnack,
+      noLunchSnack: !!daily.noLunchSnack,
+      noDinnerSnack: !!daily.noDinnerSnack,
       noSnackDay: !!daily.noSnackDay,
       dirty: false
     };
@@ -67,12 +67,12 @@ function getDraft(dateStr) {
 // from the not-yet-updated state.data, racing with the save in progress.
 async function saveDraft(dateStr) {
   const draft = getDraft(dateStr);
-  const { checkedItems, mood, work, note, lunchSnack, dinnerSnack, noSnackDay } = draft;
+  const { checkedItems, mood, work, note, noLunchSnack, noDinnerSnack, noSnackDay } = draft;
   draft.saving = true;
   route();
   await applyMutation((d) => {
     d.schedule = Schedule.setCheckedItems(d.schedule, dateStr, checkedItems);
-    d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, { mood, work, note, lunchSnack, dinnerSnack, noSnackDay });
+    d.dailyLogs = Mood.upsertDailyLog(d.dailyLogs, dateStr, { mood, work, note, noLunchSnack, noDinnerSnack, noSnackDay });
   });
   if (state.error) {
     draft.saving = false;
@@ -159,17 +159,20 @@ function dayCardHtml(dateStr, { expanded }) {
   const summary = entry ? `${checked.length}/${items.length}` : '点顺延可整体后移一天';
 
   const itemsHtml = entry
-    ? `<div class="exlist">${items.map((it) => {
-      const on = checked.includes(it.name);
-      return `<div class="ex ${on ? 'checked' : ''}" data-item="${it.name}">
-        <span class="exbox">${on ? '✓' : ''}</span>
-        <div class="en-wrap">
-          <span class="en">${it.name}</span>
-          ${it.desc ? `<span class="edesc">${it.desc}</span>` : ''}
-        </div>
-        ${it.sets ? `<span class="es">${it.sets}</span>` : ''}
-      </div>`;
-    }).join('')}</div>`
+    ? `<div class="exlist">
+        ${items.map((it) => {
+          const on = checked.includes(it.name);
+          return `<div class="ex ${on ? 'checked' : ''}" data-item="${it.name}">
+            <span class="exbox">${on ? '✓' : ''}</span>
+            <div class="en-wrap">
+              <span class="en">${it.name}</span>
+              ${it.desc ? `<span class="edesc">${it.desc}</span>` : ''}
+            </div>
+            ${it.sets ? `<span class="es">${it.sets}</span>` : ''}
+          </div>`;
+        }).join('')}
+        <button type="button" class="ex-all-btn">${isComplete ? '取消全选' : '全选本日动作'}</button>
+      </div>`
     : '';
 
   const moodPills = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill mood-btn ${draft.mood === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('');
@@ -199,8 +202,8 @@ function dayCardHtml(dateStr, { expanded }) {
           <div class="pillrow">${workPills}</div>
           <div class="sh">加餐</div>
           <div class="pillrow">
-            <button type="button" class="pill wide snack-btn ${draft.lunchSnack ? 'on' : ''}" data-field="lunchSnack">午餐额外零食</button>
-            <button type="button" class="pill wide snack-btn ${draft.dinnerSnack ? 'on' : ''}" data-field="dinnerSnack">晚餐额外零食</button>
+            <button type="button" class="pill wide snack-btn ${draft.noLunchSnack ? 'on' : ''}" data-field="noLunchSnack">午餐无额外零食</button>
+            <button type="button" class="pill wide snack-btn ${draft.noDinnerSnack ? 'on' : ''}" data-field="noDinnerSnack">晚餐无额外零食</button>
             <button type="button" class="pill wide snack-btn ${draft.noSnackDay ? 'on' : ''}" data-field="noSnackDay">全天无额外零食</button>
           </div>
           <textarea class="note" placeholder="写点什么..." ${draft.saving ? 'disabled' : ''}>${draft.note || ''}</textarea>
@@ -261,6 +264,17 @@ function bindDayCards(container) {
       route();
       return;
     }
+    if (e.target.closest('.ex-all-btn')) {
+      const draft = getDraft(dateStr);
+      const entry = Schedule.getEntry(state.data.schedule, dateStr);
+      const allNames = entry ? Schedule.getItemsForType(entry.type).map((it) => it.name) : [];
+      const alreadyAll = allNames.length > 0 && draft.checkedItems.length >= allNames.length;
+      draft.checkedItems = alreadyAll ? [] : allNames;
+      draft.dirty = true;
+      if (!alreadyAll) showToast('今天全部完成了,很了不起');
+      route();
+      return;
+    }
     if (moodBtn) {
       const draft = getDraft(dateStr);
       draft.mood = Number(moodBtn.dataset.v);
@@ -279,13 +293,19 @@ function bindDayCards(container) {
       const draft = getDraft(dateStr);
       const field = snackBtn.dataset.field;
       draft[field] = !draft[field];
-      // "全天无额外零食" and "午餐/晚餐额外零食" contradict each other —
-      // turning one on clears the other side.
-      if (field === 'noSnackDay' && draft.noSnackDay) {
-        draft.lunchSnack = false;
-        draft.dinnerSnack = false;
-      } else if (field !== 'noSnackDay' && draft[field]) {
+      // All three read as "no snack" now, so they should agree with each
+      // other: confirming the whole day implies both meals were clean;
+      // un-confirming either meal means the whole-day claim no longer
+      // holds, and confirming both meals individually implies the day.
+      if (field === 'noSnackDay') {
+        if (draft.noSnackDay) {
+          draft.noLunchSnack = true;
+          draft.noDinnerSnack = true;
+        }
+      } else if (!draft[field]) {
         draft.noSnackDay = false;
+      } else if (draft.noLunchSnack && draft.noDinnerSnack) {
+        draft.noSnackDay = true;
       }
       draft.dirty = true;
       route();
@@ -328,7 +348,6 @@ function renderToday() {
   const container = document.getElementById('view-today');
   const today = todayStr();
   container.innerHTML = `<h2>今天 · ${today}</h2>${dayCardHtml(today, { expanded: true })}`;
-  bindDayCards(container);
 }
 
 function monthGridHtml(year, month) {
@@ -409,7 +428,6 @@ function renderCalendar() {
       document.querySelector(`.day-list .day[data-date="${dateStr}"]`)?.scrollIntoView({ block: 'center' });
     };
   });
-  bindDayCards(container.querySelector('.day-list'));
 }
 
 function renderPeriod() {
@@ -524,6 +542,15 @@ function bindNav() {
 
 async function init() {
   bindNav();
+  // Bound exactly once, on the stable view containers (their innerHTML is
+  // replaced on every render, but the elements themselves never are).
+  // Previously this was called from inside renderToday()/renderCalendar()
+  // on every single render, which stacked a fresh duplicate listener on
+  // #view-today (it's never recreated) each time — after a few taps,
+  // multiple handlers fired per click and fought over the same draft,
+  // making checkboxes appear to only ever hold one checked item.
+  bindDayCards(document.getElementById('view-today'));
+  bindDayCards(document.getElementById('view-calendar'));
   window.addEventListener('hashchange', route);
   await refreshData();
   route();

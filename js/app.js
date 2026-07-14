@@ -2,11 +2,11 @@
 // index.html and these imports) exists purely to bust GitHub Pages' 10-min
 // browser cache on deploy — mobile Safari has no real hard-refresh gesture,
 // so without this a phone can keep serving yesterday's JS after an update.
-import * as GH from './github-api.js?v=9';
-import * as Schedule from './schedule.js?v=9';
-import * as Period from './period.js?v=9';
-import * as Mood from './mood.js?v=9';
-import { todayStr, formatDate, parseDate } from './date-utils.js?v=9';
+import * as GH from './github-api.js?v=10';
+import * as Schedule from './schedule.js?v=10';
+import * as Period from './period.js?v=10';
+import * as Mood from './mood.js?v=10';
+import { todayStr, formatDate, parseDate } from './date-utils.js?v=10';
 
 const VIEWS = ['today', 'calendar', 'period', 'guide', 'settings'];
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
